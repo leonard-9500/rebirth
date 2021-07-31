@@ -22,17 +22,22 @@ let spacePressed = false;
 // If the user has just moved the player this becomes true and the user may only gain the ability to move the player again by first releasing the move button.
 let spacePressedBefore = false;
 
+let enterPressed = false,
+    enterPressedBefore = false;
+
 document.addEventListener("keydown", keyDownHandler, false);
 document.addEventListener("keyup", keyUpHandler, false);
 
 function keyDownHandler(e)
 {
     if (e.code == "Space") { spacePressed = true; }
+    if (e.code == "Enter") { enterPressed = true; }
 }
 
 function keyUpHandler(e)
 {
     if (e.code == "Space") { spacePressed = false; }
+    if (e.code == "Enter") { enterPressed = false; }
 }
 
 
@@ -58,13 +63,21 @@ class Player
         this.lives = 3;
         this.score = 0;
         // The number of life orbs the player has collected.
-        this.lifeOrbs = 11;
+        this.lifeOrbs = 0;
         // How many orbs does the player need to gain the ability to revive upon death.
         this.numOrbsForRevive = 10;
+        this.numOrbsForBomb = 5;
         // This becomes true if the player dies and has enough orbs for revival.
         this.temporaryDeath = false;
+        this.lifeOrbBombX = 0;
+        this.lifeOrbBombY = 0;
+        this.lifeOrbBombR = 25;
+        this.lifeOrbBombActive = false;
+        this.gameMenu = true;
         this.gameOver = false;
         this.animationActive = false;
+        this.animationLength = 500;
+        this.animationStartTick = 0;
         this.lastHitTick = Date.now();
         // The time after a collision with an enemy in which the player cannot collide again. So he is "invincible" for one second after a collision.
         this.collisionCooldown = 1000;
@@ -74,6 +87,23 @@ class Player
     update()
     {
         this.getInput();
+        if (this.animationActive)
+        {
+            if (Date.now() - this.animationStartTick <= this.animationLength)
+            {
+                this.velY += 10;
+                this.velX = this.velXParallax;
+            }
+            else if (Date.now() - this.animationStartTick > this.animationLength)
+            {
+                this.animationActive = false;
+                this.velY = -15;
+                this.velX = 0;
+            }
+        }
+        if (this.lifeOrbBombActive)
+        {
+        }
         this.collisionDetection();
         if (this.gameOver == false) { this.score = enemySpawner.countDead; }
         this.draw();
@@ -94,14 +124,18 @@ class Player
                 if (spacePressedBefore == false)
                 {
 
-                    if (this.gameOver)
+                    if (this.gameMenu)
+                    {
+                        this.gameMenu = false;
+                    }
+                    else if (this.gameOver)
                     {
                         this.reset();
                         enemySpawner.reset();
                         lifeOrbSpawner.reset();
                     }
-                    // If player revives
-                    if (this.temporaryDeath)
+                    // If player is in revival state
+                    else if (this.temporaryDeath)
                     {
                         this.lifeOrbs -= 10;
                         this.lives = 3;
@@ -113,7 +147,7 @@ class Player
                         this.velY = -15;
                     }
                     // Invert move direction. The else if avoids the player moving at the start of a new round.
-                    else if (this.gameOver == false)
+                    else if (this.gameOver == false && this.gameMenu == false)
                     {
                         this.velY *= -1;
                     }
@@ -125,6 +159,29 @@ class Player
             if (spacePressed == false)
             {
                 spacePressedBefore = false;
+            }
+
+            if (enterPressed)
+            {
+                if (enterPressedBefore == false)
+                {
+                    if (!this.gameOver && !this.gameMenu && !this.temporaryDeath)
+                    {
+                        if (this.orbs >= this.numOrbsForBomb)
+                        {
+                            this.orbs -= 5;
+                            this.lifeOrbBombActive = true;
+                            this.lifeOrbBombX = this.x;
+                            this.lifeOrbBombY = this.y;
+                        }
+                    }
+                    enterPressedBefore = true;
+                }
+            }
+
+            if (enterPressed == false)
+            {
+                enterPressedBefore = false;
             }
         }
 
@@ -182,8 +239,11 @@ class Player
                         if (this.lifeOrbs >= this.numOrbsForRevive)
                         {
                             this.temporaryDeath = true;
-                            this.velY = 8;
-                            this.velX = this.velXParallax;
+                            if (this.animationActive == false)
+                            {
+                                this.animationStartTick = Date.now();
+                                this.animationActive = true;
+                            }
                         }
                         else
                         {
@@ -245,13 +305,15 @@ class Player
 
     draw()
     {
-        // Draw player
-        ctx.fillStyle = this.fillColor;
-        ctx.beginPath();
-        ctx.arc(this.x, this.y, this.r, 0, 2 * Math.PI);
-        ctx.fill();
+        if (this.gameMenu)
+        {
+            // Draw game title
+            this.drawTextShaded("R E B I R T H", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 72, "#FF8B1F", "#000000");
 
-        if (this.gameOver)
+            // Draw prompt
+            this.drawTextShaded("Press 'Space' to start", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2 + 150, 24, "#87C5E6", "#000000");
+        }
+        else if (this.gameOver)
         {
             // Draw game over title
             this.drawTextShaded("Game Over", SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2, 64, "#ffffff", "#000000");
@@ -264,6 +326,12 @@ class Player
         }
         else
         {
+            // Draw player
+            ctx.fillStyle = this.fillColor;
+            ctx.beginPath();
+            ctx.arc(this.x, this.y, this.r, 0, 2 * Math.PI);
+            ctx.fill();
+
             // Draw score
             this.drawTextShaded(this.score, SCREEN_WIDTH / 2, 35, 32, "#ffffff", "#000000");
 
@@ -273,12 +341,12 @@ class Player
             ctx.arc(150, 25, 15, 0, 2 * Math.PI);
             ctx.fill();
 
-            this.drawTextShaded(this.lives, 182, 35, 32, "#ffffff", "#000000");
+            this.drawTextShaded(this.lives, 212, 35, 32, "#ffffff", "#000000");
 
             // Draw number of life orbs collected
             lifeOrbSpawner.drawLifeOrb(25, 25, 15);
 
-            this.drawTextShaded(this.lifeOrbs, 55, 35, 32, "#ffffff", "#000000");
+            this.drawTextShaded(this.lifeOrbs, 85, 35, 32, "#ffffff", "#000000");
 
             if (this.temporaryDeath)
             {
@@ -351,47 +419,50 @@ class EnemySpawner
 
     update()
     {
-        // Apply movement to enemies
-        if (this.count != 0)
+        if (player.gameMenu == false)
         {
-            for (let i = 0; i < this.count; i++)
+            // Apply movement to enemies
+            if (this.count != 0)
             {
-                this.enemies[i * 2] += this.enemiesSpeed[i*2]  * elapsedTime;
-                this.enemies[i*2+1] += this.enemiesSpeed[i*2+1] * elapsedTime;
+                for (let i = 0; i < this.count; i++)
+                {
+                    this.enemies[i * 2] += this.enemiesSpeed[i*2]  * elapsedTime;
+                    this.enemies[i*2+1] += this.enemiesSpeed[i*2+1] * elapsedTime;
+                }
             }
-        }
 
-        // Only spawn enemy if maximum number hasn't been reached.
-        if (this.count < this.maxCount)
-        {
-            // Spawn new enemy if wait time has been passed.
-            if (tp1 - this.spawnTick >= this.spawnInterval)
+            // Only spawn enemy if maximum number hasn't been reached.
+            if (this.count < this.maxCount)
             {
-                //console.log("Wait time has been passed\n");
-                //console.log(tp1 - this.spawnTick + "\n");
-                this.spawnTick = Date.now();
+                // Spawn new enemy if wait time has been passed.
+                if (tp1 - this.spawnTick >= this.spawnInterval)
+                {
+                    //console.log("Wait time has been passed\n");
+                    //console.log(tp1 - this.spawnTick + "\n");
+                    this.spawnTick = Date.now();
 
-                // Assign random color to current enemy being spawned
-                this.enemiesColor[this.count] = this.enemiesColorPalette[getRandomIntInclusive(0, this.enemiesColorPalette.length-1)];//getRandomHexColor();
-                // Assign random x speed
-                this.enemiesSpeed[this.count * 2] = -getRandomNumInclusive(0.004, 0.0045);
-                // Assign random y speed
-                this.enemiesSpeed[this.count * 2 + 1] = 0;//getRandomNumInclusive(0.01, 0.05);
-                // Assign random size, radius that is.
-                this.enemiesSize[this.count] = getRandomIntInclusive(30, 35);
-                // Let the enemy spawn to the right of the play zone
-                this.enemies[this.count * 2] = SCREEN_WIDTH - playZoneBorderRight + this.enemiesSize[this.count];
-                // Assign random y-value to the enemy within the play zone height.
-                this.enemies[this.count * 2 + 1] = getRandomIntInclusive(playZoneBorderTop+this.enemiesSize[this.count], SCREEN_HEIGHT-playZoneBorderBottom-this.enemiesSize[this.count]);
+                    // Assign random color to current enemy being spawned
+                    this.enemiesColor[this.count] = this.enemiesColorPalette[getRandomIntInclusive(0, this.enemiesColorPalette.length-1)];//getRandomHexColor();
+                    // Assign random x speed
+                    this.enemiesSpeed[this.count * 2] = -getRandomNumInclusive(0.004, 0.0045);
+                    // Assign random y speed
+                    this.enemiesSpeed[this.count * 2 + 1] = 0;//getRandomNumInclusive(0.01, 0.05);
+                    // Assign random size, radius that is.
+                    this.enemiesSize[this.count] = getRandomIntInclusive(30, 35);
+                    // Let the enemy spawn to the right of the play zone
+                    this.enemies[this.count * 2] = SCREEN_WIDTH - playZoneBorderRight + this.enemiesSize[this.count];
+                    // Assign random y-value to the enemy within the play zone height.
+                    this.enemies[this.count * 2 + 1] = getRandomIntInclusive(playZoneBorderTop+this.enemiesSize[this.count], SCREEN_HEIGHT-playZoneBorderBottom-this.enemiesSize[this.count]);
 
-                this.count += 1;
-                //console.log("enemy added\n");
-                //console.log(this.enemies);
+                    this.count += 1;
+                    //console.log("enemy added\n");
+                    //console.log(this.enemies);
+                }
             }
-        }
 
-        this.collisionDetection();
-        this.draw();
+            this.collisionDetection();
+            this.draw();
+        }
     }
 
     collisionDetection()
@@ -481,46 +552,49 @@ class LifeOrbSpawner
 
     update()
     {
-        // Apply movement to orbs
-        if (this.count != 0)
+        if (player.gameMenu == false)
         {
-            for (let i = 0; i < this.count; i++)
+            // Apply movement to orbs
+            if (this.count != 0)
             {
-                this.orbs[i * 2] += this.orbsSpeed[i * 2] * elapsedTime;
-                this.orbs[i * 2 + 1] += this.orbsSpeed[i * 2 + 1] * elapsedTime;
+                for (let i = 0; i < this.count; i++)
+                {
+                    this.orbs[i * 2] += this.orbsSpeed[i * 2] * elapsedTime;
+                    this.orbs[i * 2 + 1] += this.orbsSpeed[i * 2 + 1] * elapsedTime;
+                }
             }
-        }
 
-        // Only spawn orbs if maximum number hasn't been reached.
-        if (this.count < this.maxCount)
-        {
-            // Spawn new orbs if wait time has been passed.
-            if (tp1 - this.spawnTick >= this.spawnInterval) {
-                //console.log("Wait time has been passed\n");
-                //console.log(tp1 - this.spawnTick + "\n");
-                this.spawnTick = Date.now();
+            // Only spawn orbs if maximum number hasn't been reached.
+            if (this.count < this.maxCount)
+            {
+                // Spawn new orbs if wait time has been passed.
+                if (tp1 - this.spawnTick >= this.spawnInterval) {
+                    //console.log("Wait time has been passed\n");
+                    //console.log(tp1 - this.spawnTick + "\n");
+                    this.spawnTick = Date.now();
 
-                // Assign random color to current orb being spawned
-                this.orbsColor[this.count] = this.orbsColorPalette[getRandomIntInclusive(0, this.orbsColorPalette.length - 1)];//getRandomHexColor();
-                // Assign random x speed
-                this.orbsSpeed[this.count * 2] = -0.2;//getRandomNumInclusive(0.0044, 0.0045);
-                // Assign random y speed
-                this.orbsSpeed[this.count * 2 + 1] = 0;//getRandomNumInclusive(0.01, 0.05);
-                // Assign random size, radius that is.
-                this.orbsSize[this.count] = 25;//getRandomIntInclusive(30, 35);
-                // Let the orb spawn to the right of the play zone
-                this.orbs[this.count * 2] = SCREEN_WIDTH - playZoneBorderRight + this.orbsSize[this.count];
-                // Assign random y-value to the orb within the play zone height.
-                this.orbs[this.count * 2 + 1] = getRandomIntInclusive(playZoneBorderTop + this.orbsSize[this.count], SCREEN_HEIGHT - playZoneBorderBottom - this.orbsSize[this.count]);
+                    // Assign random color to current orb being spawned
+                    this.orbsColor[this.count] = this.orbsColorPalette[getRandomIntInclusive(0, this.orbsColorPalette.length - 1)];//getRandomHexColor();
+                    // Assign random x speed
+                    this.orbsSpeed[this.count * 2] = -0.2;//getRandomNumInclusive(0.0044, 0.0045);
+                    // Assign random y speed
+                    this.orbsSpeed[this.count * 2 + 1] = 0;//getRandomNumInclusive(0.01, 0.05);
+                    // Assign random size, radius that is.
+                    this.orbsSize[this.count] = 25;//getRandomIntInclusive(30, 35);
+                    // Let the orb spawn to the right of the play zone
+                    this.orbs[this.count * 2] = SCREEN_WIDTH - playZoneBorderRight + this.orbsSize[this.count];
+                    // Assign random y-value to the orb within the play zone height.
+                    this.orbs[this.count * 2 + 1] = getRandomIntInclusive(playZoneBorderTop + this.orbsSize[this.count], SCREEN_HEIGHT - playZoneBorderBottom - this.orbsSize[this.count]);
 
-                this.count += 1;
-                //console.log("orb added\n");
-                //console.log(this.orbs);
+                    this.count += 1;
+                    //console.log("orb added\n");
+                    //console.log(this.orbs);
+                }
             }
-        }
 
-        this.collisionDetection();
-        this.draw();
+            this.collisionDetection();
+            this.draw();
+        }
     }
 
     collisionDetection()
@@ -646,22 +720,25 @@ let playZoneFillColor = "#444444";
 
 function drawPlayZone()
 {
-    ctx.fillStyle = playZoneFillColor;
+    if (!player.gameMenu)
+    {
+        ctx.fillStyle = playZoneFillColor;
 
-    // If you remove this call to beginPath, the player will be drawn even if it's call to fill() is commented out.
-    ctx.beginPath();
-    // Draw left border box
-    ctx.rect(0, playZoneBorderTop, playZoneBorderLeft, SCREEN_HEIGHT - playZoneBorderTop - playZoneBorderBottom);
+        // If you remove this call to beginPath, the player will be drawn even if it's call to fill() is commented out.
+        ctx.beginPath();
+        // Draw left border box
+        ctx.rect(0, playZoneBorderTop, playZoneBorderLeft, SCREEN_HEIGHT - playZoneBorderTop - playZoneBorderBottom);
 
-    // Draw right border box
-    ctx.rect(SCREEN_WIDTH - playZoneBorderRight, playZoneBorderTop, playZoneBorderRight, SCREEN_HEIGHT - playZoneBorderTop - playZoneBorderBottom);
+        // Draw right border box
+        ctx.rect(SCREEN_WIDTH - playZoneBorderRight, playZoneBorderTop, playZoneBorderRight, SCREEN_HEIGHT - playZoneBorderTop - playZoneBorderBottom);
 
-    // Draw top border box
-    ctx.rect(0, 0, SCREEN_WIDTH, playZoneBorderTop);
+        // Draw top border box
+        ctx.rect(0, 0, SCREEN_WIDTH, playZoneBorderTop);
 
-    // Draw bottom border box
-    ctx.rect(0, SCREEN_HEIGHT - playZoneBorderBottom, SCREEN_WIDTH, playZoneBorderBottom);
-    ctx.fill();
+        // Draw bottom border box
+        ctx.rect(0, SCREEN_HEIGHT - playZoneBorderBottom, SCREEN_WIDTH, playZoneBorderBottom);
+        ctx.fill();
+    }
 }
 
 // Object definitions
